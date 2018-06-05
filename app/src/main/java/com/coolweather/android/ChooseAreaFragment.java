@@ -1,6 +1,7 @@
 package com.coolweather.android;
 
 import android.app.ProgressDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -20,6 +21,7 @@ import com.coolweather.android.db.County;
 import com.coolweather.android.db.Province;
 import com.coolweather.android.util.HttpUtil;
 import com.coolweather.android.util.Utility;
+
 
 import org.litepal.crud.DataSupport;
 
@@ -41,11 +43,17 @@ public class ChooseAreaFragment extends Fragment {
     private ListView listView;
     private ArrayAdapter<String> adapter;
     private List<String> dataList = new ArrayList<>();
+    /*省列表*/
     private List<Province> provinceList;
+    /*市列表*/
     private List<City> cityList;
+    /*县列表*/
     private List<County> countyList;
+    //选中的省份
     private Province selectedProvince;
+    //选中的城市
     private City selectedCity;
+    //当前选中的级别
     private int currentLevel;
 
 
@@ -73,6 +81,21 @@ public class ChooseAreaFragment extends Fragment {
                 }else if (currentLevel == LEVEL_CITY){
                     selectedCity = cityList.get(position);
                     queryCounties();
+                }else if(currentLevel == LEVEL_COUNTY){
+                    String weatherId = countyList.get(position).getWeatherId();
+                    if (getActivity() instanceof MainActivity){
+                        Intent intent = new Intent(getActivity(),WeatherActivity.class);
+                        intent.putExtra("weather_id",weatherId);
+                        startActivity(intent);
+                        getActivity().finish();
+                    }else if (getActivity() instanceof WeatherActivity){
+                        WeatherActivity activity = (WeatherActivity) getActivity();
+                        activity.drawerLayout.closeDrawers();
+                        activity.swipeRefresh.setRefreshing(false);
+                        activity.requestWeather(weatherId);
+                    }
+
+
                 }
             }
         });
@@ -88,11 +111,15 @@ public class ChooseAreaFragment extends Fragment {
         });
         queryProvinces();
     }
+
+    /**
+     *查询全国所有的省，优先从数据库查询，如果没有查询到再去服务器上查询
+     */
     private void queryProvinces(){
         titleText.setText("中国");
         backButton.setVisibility(View.GONE);
         provinceList = DataSupport.findAll(Province.class);
-        if (provinceList.size()>0){
+        if (provinceList.size() > 0){
             dataList.clear();
             for (Province province : provinceList){
                 dataList.add(province.getProvinceName());
@@ -106,6 +133,9 @@ public class ChooseAreaFragment extends Fragment {
         }
     }
 
+    /*
+    查询选中省内所有的市，优先从数据库查询，如果没有查询到再去服务器上查询
+     */
     private void queryCities(){
         titleText.setText(selectedProvince.getProvinceName());
         backButton.setVisibility(View.VISIBLE);
@@ -124,6 +154,9 @@ public class ChooseAreaFragment extends Fragment {
             queryFromServer(address,"city");
         }
     }
+    /*
+    查询选中市内所有的县，优先从数据库查询，如果没有查询到再去服务器上查询
+     */
     private void queryCounties(){
         titleText.setText(selectedCity.getCityName());
         backButton.setVisibility(View.VISIBLE);
@@ -139,24 +172,16 @@ public class ChooseAreaFragment extends Fragment {
         }else {
             int provinceCode = selectedProvince.getProvinceCode();
             int cityCode = selectedCity.getCityCode();
-            String address = "http://guolin.tech/api/china/"+provinceCode+"/"+cityCode;
+            String address = "http://guolin.tech/api/china/" + provinceCode + "/" + cityCode;
             queryFromServer(address,"county");
         }
     }
+    /*
+    根据传入的地址和类型从服务器上查询省市县数据
+     */
     private void queryFromServer(String address,final String type){
         showProgressDialog();
         HttpUtil.sendOkHttpRequest(address, new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                getActivity().runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        closeProgressDialog();
-                        Toast.makeText(getContext(),"加载失败",Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-
             @Override
             public void onResponse(Call call, Response response) throws IOException {
                 String responseText = response.body().string();
@@ -184,16 +209,33 @@ public class ChooseAreaFragment extends Fragment {
                     });
                 }
             }
+            @Override
+            public void onFailure(Call call, IOException e) {
+                getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        closeProgressDialog();
+                        Toast.makeText(getContext(),"加载失败",Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
         });
     }
+
+    /*
+    显示进度对话框
+     */
     private void showProgressDialog(){
-        if (progressDialog ==null){
+        if (progressDialog == null){
             progressDialog = new ProgressDialog(getActivity());
             progressDialog.setMessage("正在加载...");
             progressDialog.setCanceledOnTouchOutside(false);
         }
         progressDialog.show();
     }
+    /*
+    关闭进度对话框
+     */
     private  void closeProgressDialog(){
         if (progressDialog != null){
             progressDialog.dismiss();
